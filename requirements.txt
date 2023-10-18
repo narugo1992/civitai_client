@@ -1,0 +1,9 @@
+selenium~=4.8.0
+requests
+pysocks
+click>=8.0.0
+huggingface_hub>=0.14.0
+hbutils>=0.9.0
+webdriver-manager
+pyquery
+dateparser

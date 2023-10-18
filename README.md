@@ -1,0 +1,42 @@
+# civitai_client
+
+## Clone and install
+
+```shell
+git clone https://github.com/narugo1992/civitai_client.git
+cd civitai_client
+pip install -r requirements.txt
+```
+
+## Login your civitai account
+
+You need a chrome browser (other browsers are not supported yet, maybe you can create a PR)
+
+```shell
+python -m civitai.session login -o cookies.json
+```
+
+Then, login your account in the new chrome windows, the cookies file will be saved to `cookies.json`.
+
+## Do something with your account
+
+More APIs are coming soon ...
+
+```python
+from civitai.client import CivitAIClient
+
+client = CivitAIClient.load('test_cookies.json')
+
+# who am i
+print(client.whoami)
+
+# get creator profile info
+print(client.creator_info('narugo1992'))
+
+# get self profile info
+print(client.creator_info_self())
+
+# get your buzz count
+print(client.buzz_count())
+
+```
