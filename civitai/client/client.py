@@ -43,7 +43,6 @@ class CivitAIClient:
         return self.creator_info(self.whoami.username)
 
     def buzz_count(self):
-        print(req_data_format(undefined))
         resp = self._session.get(
             f'{CIVITAI_ROOT}/api/trpc/buzz.getUserAccount',
             params={
@@ -55,24 +54,66 @@ class CivitAIClient:
         json_ = resp.json()
         return resp_data_parse(json_['result']['data'])
 
-    def iter_articles_self(self):
-        resp = self._session.get(
-            f'{CIVITAI_ROOT}/api/trpc/article.getInfinite',
-            params={
-                "input": json.dumps(req_data_format({
-                    "period": "AllTime",
-                    "periodMode": "published",
-                    "sort": "Newest",
-                    "view": "categories",
-                    "username": self.whoami.username,
-                    "includeDrafts": False,
-                    "browsingMode": "NSFW",
-                    "cursor": undefined,
-                    "authed": self._authed
-                }))
-            },
-        )
-        resp.raise_for_status()
+    def iter_articles(self, username):
+        next_cursor = undefined
+        while True:
+            resp = self._session.get(
+                f'{CIVITAI_ROOT}/api/trpc/article.getInfinite',
+                params={
+                    "input": json.dumps(req_data_format({
+                        "period": "AllTime",
+                        "periodMode": "published",
+                        "sort": "Newest",
+                        "view": "categories",
+                        "username": username,
+                        "includeDrafts": False,
+                        "browsingMode": "NSFW",
+                        "cursor": next_cursor,
+                        "authed": self._authed
+                    }))
+                },
+            )
+            resp.raise_for_status()
 
-        json_ = resp.json()
-        return resp_data_parse(json_['result']['data'])
+            json_ = resp.json()
+            resp_data = resp_data_parse(json_['result']['data'])
+            items = resp_data['items']
+            next_cursor = resp_data['nextCursor']
+            yield from items
+
+            if next_cursor is None:
+                break
+
+    def iter_articles_self(self):
+        yield from self.iter_articles(self.whoami.username)
+
+    def iter_models(self, username):
+        next_cursor = undefined
+        while True:
+            resp = self._session.get(
+                f'{CIVITAI_ROOT}/api/trpc/model.getAll',
+                params={
+                    "input": json.dumps(req_data_format({
+                        "period": "AllTime",
+                        "periodMode": "published",
+                        "sort": "Newest",
+                        "view": "feed",
+                        "username": username,
+                        "cursor": next_cursor,
+                        "authed": self._authed,
+                    }))
+                },
+            )
+            resp.raise_for_status()
+
+            json_ = resp.json()
+            resp_data = resp_data_parse(json_['result']['data'])
+            items = resp_data['items']
+            next_cursor = resp_data['nextCursor']
+            yield from items
+
+            if next_cursor is None:
+                break
+
+    def iter_models_self(self):
+        yield from self.iter_models(self.whoami.username)

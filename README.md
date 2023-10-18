@@ -39,4 +39,7 @@ print(client.creator_info_self())
 # get your buzz count
 print(client.buzz_count())
 
+# list models
+for item in client.iter_models('narugo1992'):
+    print(item['name'], item['publishedAt'])
 ```
