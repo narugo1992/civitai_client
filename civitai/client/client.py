@@ -1,8 +1,10 @@
 import json
-from functools import partial
 from typing import Optional
+from urllib.parse import urljoin
 
 import requests
+from hbutils.collection import nested_map
+from hbutils.design import SingletonMark
 
 from .superjs import resp_data_parse, req_data_format, undefined
 from ..session import load_civitai_session, whoami, WhoAmI, CIVITAI_ROOT
@@ -11,6 +13,18 @@ from ..utils import CookiesTyping
 
 class SessionError(Exception):
     pass
+
+
+m_page = SingletonMark('mark_page')
+m_cursor = SingletonMark('mark_cursor')
+
+
+def _replace_page(data, page):
+    return nested_map(lambda x: page if x is m_page else x, data)
+
+
+def _replace_cursor(data, cursor):
+    return nested_map(lambda x: cursor if x is m_cursor else x, data)
 
 
 class CivitAIClient:
@@ -46,38 +60,28 @@ class CivitAIClient:
         else:
             raise SessionError('You need to login first.')
 
-    def creator_info(self, creator_name):
+    def _get(self, url, data=undefined):
         resp = self._session.get(
-            f'{CIVITAI_ROOT}/api/trpc/user.getCreator',
+            urljoin(CIVITAI_ROOT, url),
             params={
-                'input': json.dumps(req_data_format({
-                    "username": creator_name,
-                    "authed": self._authed
-                })),
+                'input': json.dumps(req_data_format(data)),
             },
         )
         resp.raise_for_status()
-
         json_ = resp.json()
         return resp_data_parse(json_['result']['data'])
 
-    def creator_info_self(self):
-        return self.creator_info(self._username)
-
-    def buzz_count(self):
-        resp = self._session.get(
-            f'{CIVITAI_ROOT}/api/trpc/buzz.getUserAccount',
-            params={
-                'input': json.dumps(req_data_format(undefined)),
-            },
+    def _post(self, url, data=undefined):
+        resp = self._session.post(
+            urljoin(CIVITAI_ROOT, url),
+            json=req_data_format(data),
         )
         resp.raise_for_status()
-
         json_ = resp.json()
         return resp_data_parse(json_['result']['data'])
 
     @classmethod
-    def _iter_via_cursor(cls, fn):
+    def _iter_via_cursor_fn(cls, fn):
         cursor = undefined
         while True:
             items, cursor = fn(cursor)
@@ -86,8 +90,15 @@ class CivitAIClient:
             if cursor is None:
                 break
 
+    def _iter_via_cursor(self, url, data):
+        def _fn(cursor):
+            resp_data = self._get(url, _replace_cursor(data, cursor))
+            return resp_data['items'], resp_data['nextCursor']
+
+        yield from self._iter_via_cursor_fn(_fn)
+
     @classmethod
-    def _iter_via_page(cls, fn):
+    def _iter_via_page_fn(cls, fn):
         page = 1
         while True:
             items = fn(page)
@@ -100,229 +111,176 @@ class CivitAIClient:
                 break
             page += 1
 
-    def _iter_articles(self, username, next_cursor):
-        resp = self._session.get(
-            f'{CIVITAI_ROOT}/api/trpc/article.getInfinite',
-            params={
-                "input": json.dumps(req_data_format({
-                    "period": "AllTime",
-                    "periodMode": "published",
-                    "sort": "Newest",
-                    "view": "categories",
-                    "username": username,
-                    "includeDrafts": False,
-                    "browsingMode": "NSFW",
-                    "cursor": next_cursor,
-                    "authed": self._authed
-                }))
-            },
-        )
-        resp.raise_for_status()
+    def _iter_via_page(self, url, data):
+        def _fn(page):
+            resp_data = self._get(url, _replace_page(data, page))
+            return resp_data['items']
 
-        json_ = resp.json()
-        resp_data = resp_data_parse(json_['result']['data'])
-        items = resp_data['items']
-        next_cursor = resp_data['nextCursor']
-        return items, next_cursor
+        yield from self._iter_via_page_fn(_fn)
+
+    def get_buzz_count(self):
+        return self._get('/api/trpc/buzz.getUserAccount')
+
+    def iter_buzz_transactions(self, limit: int = 200):
+        return self._get(
+            '/api/trpc/buzz.getUserTransactions',
+            {
+                "limit": limit,
+                "authed": self._authed,
+            }
+        )['transactions']
 
     def iter_articles(self, username):
-        yield from self._iter_via_cursor(partial(self._iter_articles, username))
+        yield from self._iter_via_cursor(
+            '/api/trpc/article.getInfinite',
+            {
+                "period": "AllTime",
+                "periodMode": "published",
+                "sort": "Newest",
+                "view": "categories",
+                "username": username,
+                "includeDrafts": False,
+                "browsingMode": "NSFW",
+                "cursor": m_cursor,
+                "authed": self._authed
+            }
+        )
 
     def iter_articles_self(self):
         yield from self.iter_articles(self._username)
 
-    def _iter_models(self, username, next_cursor):
-        resp = self._session.get(
-            f'{CIVITAI_ROOT}/api/trpc/model.getAll',
-            params={
-                "input": json.dumps(req_data_format({
-                    "period": "AllTime",
-                    "periodMode": "published",
-                    "sort": "Newest",
-                    "view": "feed",
-                    "username": username,
-                    "cursor": next_cursor,
-                    "authed": self._authed,
-                }))
-            },
-        )
-        resp.raise_for_status()
-        json_ = resp.json()
-        resp_data = resp_data_parse(json_['result']['data'])
-        items = resp_data['items']
-        next_cursor = resp_data['nextCursor']
-        return items, next_cursor
-
     def iter_models(self, username):
-        yield from self._iter_via_cursor(partial(self._iter_models, username))
+        yield from self._iter_via_cursor(
+            '/api/trpc/model.getAll',
+            {
+                "period": "AllTime",
+                "periodMode": "published",
+                "sort": "Newest",
+                "view": "feed",
+                "username": username,
+                "cursor": m_cursor,
+                "authed": self._authed,
+            }
+        )
 
     def iter_models_self(self):
         yield from self.iter_models(self._username)
 
-    def _iter_draft_models(self, limit: int, page: int):
-        resp = self._session.get(
-            'https://civitai.com/api/trpc/model.getMyDraftModels',
-            params={
-                'input': json.dumps(req_data_format({
-                    "page": page, "limit": limit,
-                    "authed": self._authed,
-                }))
-            }
-        )
-        resp.raise_for_status()
-        json_ = resp.json()
-        resp_data = resp_data_parse(json_['result']['data'])
-        items = resp_data['items']
-        return items
-
     def iter_draft_models(self, limit: int = 10):
-        yield from self._iter_via_page(partial(self._iter_draft_models, limit))
-
-    def _iter_training_models(self, limit: int, page: int):
-        resp = self._session.get(
-            'https://civitai.com/api/trpc/model.getMyTrainingModels',
-            params={
-                'input': json.dumps(req_data_format({
-                    "page": page, "limit": limit,
-                    "authed": self._authed
-                })),
+        yield from self._iter_via_page(
+            '/api/trpc/model.getMyDraftModels',
+            {
+                "page": m_page,
+                "limit": limit,
+                "authed": self._authed,
             }
         )
-        resp.raise_for_status()
-        json_ = resp.json()
-        resp_data = resp_data_parse(json_['result']['data'])
-        items = resp_data['items']
-        return items
 
     def iter_training_models(self, limit: int = 10):
-        yield from self._iter_via_page(partial(self._iter_training_models, limit))
-
-    def _iter_posts(self, username, cursor):
-        resp = self._session.get(
-            'https://civitai.com/api/trpc/post.getInfinite',
-            params={
-                'input': json.dumps(req_data_format({
-                    "period": "AllTime",
-                    "periodMode": "published",
-                    "sort": "Newest",
-                    "view": "categories",
-                    "username": username,
-                    "draftOnly": False,
-                    "browsingMode": "NSFW",
-                    "include": [],
-                    "cursor": cursor,
-                    "authed": self._authed
-                }))
+        yield from self._iter_via_page(
+            '/api/trpc/model.getMyTrainingModels',
+            {
+                "page": m_page,
+                "limit": limit,
+                "authed": self._authed
             }
         )
-        resp.raise_for_status()
-        json_ = resp.json()
-        resp_data = resp_data_parse(json_['result']['data'])
-        items = resp_data['items']
-        next_cursor = resp_data['nextCursor']
-        return items, next_cursor
 
     def iter_posts(self, username):
-        yield from self._iter_via_cursor(partial(self._iter_posts, username))
+        yield from self._iter_via_cursor(
+            '/api/trpc/post.getInfinite',
+            {
+                "period": "AllTime",
+                "periodMode": "published",
+                "sort": "Newest",
+                "view": "categories",
+                "username": username,
+                "draftOnly": False,
+                "browsingMode": "NSFW",
+                "include": [],
+                "cursor": m_cursor,
+                "authed": self._authed
+            }
+        )
 
     def iter_posts_self(self):
         yield from self.iter_posts(self._username)
 
-    def _iter_images(self, username, cursor):
-        resp = self._session.get(
-            'https://civitai.com/api/trpc/image.getInfinite',
-            params={
-                'input': json.dumps(req_data_format({
-                    "period": "AllTime",
-                    "sort": "Newest",
-                    "view": "categories",
-                    "username": username,
-                    "withMeta": False,
-                    "browsingMode": "NSFW",
-                    "cursor": cursor,
-                    "authed": self._authed,
-                }))
+    def iter_images(self, username):
+        yield from self._iter_via_cursor(
+            '/api/trpc/image.getInfinite',
+            {
+                "period": "AllTime",
+                "sort": "Newest",
+                "view": "categories",
+                "username": username,
+                "withMeta": False,
+                "browsingMode": "NSFW",
+                "cursor": m_cursor,
+                "authed": self._authed,
             }
         )
-        resp.raise_for_status()
-        json_ = resp.json()
-        resp_data = resp_data_parse(json_['result']['data'])
-        items = resp_data['items']
-        next_cursor = resp_data['nextCursor']
-        return items, next_cursor
-
-    def iter_images(self, username):
-        yield from self._iter_via_cursor(partial(self._iter_images, username))
 
     def iter_images_self(self):
         yield from self.iter_images(self._username)
 
-    def _iter_collections(self, userid, cursor):
-        resp = self._session.get(
-            'https://civitai.com/api/trpc/collection.getInfinite',
-            params={
-                'input': json.dumps(req_data_format({
-                    "sort": "Newest",
-                    "userId": userid,
-                    "cursor": cursor,
-                    "authed": self._authed,
-                }))
-            },
-        )
-        resp.raise_for_status()
-        json_ = resp.json()
-        resp_data = resp_data_parse(json_['result']['data'])
-        items = resp_data['items']
-        next_cursor = resp_data['nextCursor']
-        return items, next_cursor
-
     def iter_collections(self, userid):
-        yield from self._iter_via_cursor(partial(self._iter_collections, userid))
+        yield from self._iter_via_cursor(
+            '/api/trpc/collection.getInfinite',
+            {
+                "sort": "Newest",
+                "userId": userid,
+                "cursor": m_cursor,
+                "authed": self._authed,
+            }
+        )
 
     def iter_collections_self(self):
         yield from self.iter_collections(self._userid)
 
     def get_followers(self, username):
-        resp = self._session.get(
-            'https://civitai.com/api/trpc/user.getLists',
-            params={
-                'input': json.dumps(req_data_format({
-                    "username": username,
-                    "authed": self._authed,
-                }))
+        return self._get(
+            '/api/trpc/user.getLists',
+            {
+                "username": username,
+                "authed": self._authed,
             }
         )
-        resp.raise_for_status()
-        json_ = resp.json()
-        return resp_data_parse(json_['result']['data'])
 
     def get_followers_self(self):
         return self.get_followers(self._username)
 
-    def get_notifications(self, limit: int = 10):
-        resp = self._session.get(
-            'https://civitai.com/api/trpc/notification.getAllByUser',
-            params={
-                'input': json.dumps(req_data_format({
-                    "limit": limit,
-                    "authed": self._authed
-                }))
+    def iter_notifications(self):
+        yield from self._iter_via_cursor(
+            '/api/trpc/notification.getAllByUser',
+            {
+                "cursor": m_cursor,
+                "authed": self._authed
             }
         )
-        resp.raise_for_status()
-        json_ = resp.json()
-        return resp_data_parse(json_['result']['data'])
 
     def mark_notification_to_read(self):
-        resp = self._session.post(
-            'https://civitai.com/api/trpc/notification.markRead',
-            json=req_data_format({
+        return self._post(
+            '/api/trpc/notification.markRead',
+            {
                 "id": undefined,
                 "all": True,
                 "userId": self._userid,
                 "authed": self._authed,
-            })
+            }
         )
-        resp.raise_for_status()
-        json_ = resp.json()
-        return resp_data_parse(json_['result']['data'])
+
+    def get_creator(self, username):
+        return self._get(
+            '/api/trpc/user.getCreator',
+            {
+                "username": username,
+                "authed": self._authed
+            }
+        )
+
+    def get_myself(self):
+        return self.get_creator(self._username)
+
+    def get_article(self, article_id):
+        pass

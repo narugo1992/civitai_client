@@ -37,7 +37,7 @@ print(client.creator_info('narugo1992'))
 print(client.creator_info_self())
 
 # get your buzz count
-print(client.buzz_count())
+print(client.get_buzz_count())
 
 # list models
 for item in client.iter_models('narugo1992'):
@@ -52,5 +52,5 @@ for item in client.iter_posts('narugo1992'):
     print(item['id'], item['createdAt'])
 
 # get notifications
-print(client.get_notifications())
+print(client.iter_notifications())
 ```
