@@ -25,7 +25,7 @@ More APIs are coming soon ...
 ```python
 from civitai.client import CivitAIClient
 
-client = CivitAIClient.load('test_cookies.json')
+client = CivitAIClient.load('cookies.json')
 
 # who am i
 print(client.whoami)
@@ -42,4 +42,15 @@ print(client.buzz_count())
 # list models
 for item in client.iter_models('narugo1992'):
     print(item['name'], item['publishedAt'])
+
+# list draft models
+for item in client.iter_draft_models():
+    print(item['name'], item['publishedAt'])
+
+# list posts
+for item in client.iter_posts('narugo1992'):
+    print(item['id'], item['createdAt'])
+
+# get notifications
+print(client.get_notifications())
 ```
