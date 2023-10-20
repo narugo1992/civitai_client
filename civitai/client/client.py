@@ -6,14 +6,15 @@ import requests
 from hbutils.collection import nested_map
 from hbutils.design import SingletonMark
 
+from .exceptions import SessionError, APIError
 from .superjs import resp_data_parse, req_data_format, undefined
 from ..session import load_civitai_session, whoami, WhoAmI, CIVITAI_ROOT
 from ..utils import CookiesTyping
 
-
-class SessionError(Exception):
-    pass
-
+try:
+    from typing import Literal
+except (ImportError, ModuleNotFoundError):
+    from typing_extensions import Literal
 
 m_page = SingletonMark('mark_page')
 m_cursor = SingletonMark('mark_cursor')
@@ -25,6 +26,9 @@ def _replace_page(data, page):
 
 def _replace_cursor(data, cursor):
     return nested_map(lambda x: cursor if x is m_cursor else x, data)
+
+
+ReactionTyping = Literal['Like', 'Dislike', 'Heart', 'Laugh', 'Cry']
 
 
 class CivitAIClient:
@@ -60,25 +64,29 @@ class CivitAIClient:
         else:
             raise SessionError('You need to login first.')
 
+    @classmethod
+    def _resp_postprocess(cls, resp):
+        try:
+            json_ = resp.json()
+        except json.JSONDecodeError:
+            resp.raise_for_status()
+        else:
+            if 'error' in json_['result']:
+                raise APIError(resp, resp_data_parse(json_['result']['data']))
+            else:
+                return resp_data_parse(json_['result']['data'])
+
     def _get(self, url, data=undefined):
-        resp = self._session.get(
+        return self._resp_postprocess(self._session.get(
             urljoin(CIVITAI_ROOT, url),
-            params={
-                'input': json.dumps(req_data_format(data)),
-            },
-        )
-        resp.raise_for_status()
-        json_ = resp.json()
-        return resp_data_parse(json_['result']['data'])
+            params={'input': json.dumps(req_data_format(data))},
+        ))
 
     def _post(self, url, data=undefined):
-        resp = self._session.post(
+        return self._resp_postprocess(self._session.post(
             urljoin(CIVITAI_ROOT, url),
             json=req_data_format(data),
-        )
-        resp.raise_for_status()
-        json_ = resp.json()
-        return resp_data_parse(json_['result']['data'])
+        ))
 
     @classmethod
     def _iter_via_cursor_fn(cls, fn):
@@ -90,10 +98,10 @@ class CivitAIClient:
             if cursor is None:
                 break
 
-    def _iter_via_cursor(self, url, data):
+    def _iter_via_cursor(self, url, data, items_key: str = 'items'):
         def _fn(cursor):
             resp_data = self._get(url, _replace_cursor(data, cursor))
-            return resp_data['items'], resp_data['nextCursor']
+            return resp_data[items_key], resp_data['nextCursor']
 
         yield from self._iter_via_cursor_fn(_fn)
 
@@ -270,7 +278,7 @@ class CivitAIClient:
             }
         )
 
-    def get_creator(self, username):
+    def get_creator(self, username: str):
         return self._get(
             '/api/trpc/user.getCreator',
             {
@@ -279,8 +287,155 @@ class CivitAIClient:
             }
         )
 
+    def get_creator_by_id(self, userid: int):
+        return self._get(
+            '/api/trpc/user.getCreator',
+            {
+                'id': userid,
+                'authed': self._authed,
+            }
+        )
+
     def get_myself(self):
         return self.get_creator(self._username)
 
-    def get_article(self, article_id):
-        pass
+    def get_article(self, article_id: int):
+        return self._get(
+            '/api/trpc/article.getById',
+            {
+                "id": article_id,
+                "authed": self._authed,
+            }
+        )
+
+    def get_article_comments(self, article_id: int):
+        return self._get(
+            '/api/trpc/commentv2.getThreadDetails',
+            {
+                "entityId": article_id,
+                "entityType": "article",
+                "hidden": undefined,
+                "authed": self._authed,
+            }
+        )
+
+    def _toggle_reactions(self, entity_id: int, entity_type: str, reaction: ReactionTyping):
+        return self._post(
+            '/api/trpc/reaction.toggle',
+            {
+                "entityId": entity_id,
+                "entityType": entity_type,
+                "reaction": reaction,
+                "authed": self._authed
+            }
+        )
+
+    def toggle_article_engagement(self, article_id: int):
+        return self._post(
+            '/api/trpc/user.toggleArticleEngagement',
+            {
+                "type": "Favorite",
+                "articleId": article_id,
+                "authed": self._authed,
+            }
+        )
+
+    def toggle_article_reaction(self, article_id: int, reaction: ReactionTyping):
+        return self._toggle_reactions(article_id, 'article', reaction)
+
+    def toggle_article_comment_reaction(self, comment_id: int, reaction: ReactionTyping):
+        return self._toggle_reactions(comment_id, 'comment', reaction)
+
+    def get_model(self, model_id: int):
+        return self._get(
+            '/api/trpc/model.getById',
+            {
+                "id": model_id,
+                "authed": self._authed,
+            }
+        )
+
+    def iter_model_images(self, model_id):
+        yield from self._iter_via_cursor(
+            '',
+            {
+                "modelVersionId": model_id,
+                "prioritizedUserIds": [self._userid] if self.whoami else [],
+                "period": "AllTime",
+                "sort": "Most Reactions",
+                "limit": 20,
+                "browsingMode": "NSFW",
+                "cursor": m_cursor,
+                "authed": self._authed,
+            }
+        )
+
+    def get_model_suggested_resources(self, model_id: int):
+        return self._get(
+            '/api/trpc/model.getAssociatedResourcesCardData',
+            {
+                "fromId": model_id, "type": "Suggested", "authed": self._authed,
+            }
+        )
+
+    def get_model_comments(self, model_id: int):
+        yield from self._iter_via_cursor(
+            '/api/trpc/comment.getAll',
+            {
+                "modelId": model_id,
+                "limit": 8,
+                "sort": "newest",
+                "hidden": undefined,
+                "cursor": m_cursor,
+                "authed": self._authed
+            },
+            items_key='comments',
+        )
+
+    def get_model_posts(self, model_id: int, model_version_id: int):
+        yield from self._iter_via_cursor(
+            '/api/trpc/image.getImagesAsPostsInfinite',
+            {
+                "period": "AllTime",
+                "sort": "Newest",
+                "view": "categories",
+                "modelVersionId": model_version_id,
+                "modelId": model_id,
+                "limit": 50,
+                "cursor": m_cursor,
+                "authed": self._authed,
+            }
+        )
+
+    def toggle_image_reaction(self, image_id: int, reaction: ReactionTyping):
+        return self._toggle_reactions(image_id, 'image', reaction)
+
+    def toggle_model_comment_reaction(self, comment_id: int, reaction: ReactionTyping):
+        return self._post(
+            '/api/trpc/comment.toggleReaction',
+            {
+                "id": comment_id,
+                "reaction": reaction,
+                "authed": self._authed,
+            }
+        )
+
+    def get_post(self, post_id):
+        return self._get(
+            '/api/trpc/post.get',
+            {
+                "id": post_id,
+                "authed": self._authed
+            }
+        )
+
+    def iter_post_images(self, post_id):
+        yield from self._iter_via_cursor(
+            '/api/trpc/image.getInfinite',
+            {
+                "postId": post_id,
+                "browsingMode": "NSFW",
+                "cursor": m_cursor,
+                "authed": self._authed,
+            }
+        )
