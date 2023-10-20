@@ -54,3 +54,30 @@ for item in client.iter_posts('narugo1992'):
 # get notifications
 print(client.iter_notifications())
 ```
+
+## A Funny Thing
+
+```python
+from itertools import islice
+from pprint import pprint
+
+from civitai.client import CivitAIClient
+
+client = CivitAIClient.load('cookies.json')
+
+# who am i, check the session
+print(client.whoami)
+
+
+def _iter_images():
+    for post in client.iter_images_by_category():
+        yield from post['items']
+
+
+if __name__ == '__main__':
+    # 20x5 = 100, you know what I mean here
+    for ix in islice(_iter_images(), 20):
+        pprint((ix['id'], client.toggle_image_reaction(ix['id'], 'Like')))
+
+```
+

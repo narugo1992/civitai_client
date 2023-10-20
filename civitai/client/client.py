@@ -439,3 +439,17 @@ class CivitAIClient:
                 "authed": self._authed,
             }
         )
+
+    def iter_images_by_category(self):
+        yield from self._iter_via_cursor(
+            '/api/trpc/image.getImagesByCategory',
+            {
+                "period": "Week",
+                "sort": "Newest",
+                "view": "categories",
+                "limit": 6,
+                "browsingMode": "NSFW",
+                "cursor": m_cursor,
+                "authed": self._authed,
+            }
+        )
