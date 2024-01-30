@@ -1,0 +1,13 @@
+requests
+pysocks
+click>=8.0.0
+huggingface_hub>=0.17.0
+hbutils>=0.9.0
+pyquery
+dateparser
+dghs-imgutils>=0.3.4
+markdown2
+urlobject
+pillow
+blurhash
+numpy
