@@ -870,7 +870,6 @@ class CivitAIClient:
                     "authed": True
                 }
             )
-            resp.raise_for_status()
 
         for tag in tags:
             for tag_item in self.query_post_tags(tag):
