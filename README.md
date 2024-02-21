@@ -161,6 +161,29 @@ client.model_set_associate(
 
 ```
 
+## Upload One Image
+
+Upload one image to civitai. This may be useful when using images in model description or articles.
+
+```python
+from civitai.client import CivitAIClient
+
+client = CivitAIClient.load('cookies.json')
+
+# who am i, check the session
+print(client.whoami)
+
+local_img_file = '/my/image/file.png'
+item = client.upload_image(local_img_file)
+
+# full-size original image url
+print(item.original_url)
+
+# preview image with given width
+print(item.get_width_url(width=525))
+
+```
+
 ## A Funny Thing
 
 ```python

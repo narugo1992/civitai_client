@@ -22,6 +22,7 @@ from tqdm import tqdm
 from urlobject import URLObject
 
 from .exceptions import SessionError, APIError
+from .image import CivitaiImage
 from .superjs import resp_data_parse, req_data_format, undefined
 from ..session import load_civitai_session, whoami, WhoAmI, CIVITAI_ROOT
 from ..utils import CookiesTyping, parse_publish_at
@@ -800,6 +801,26 @@ class CivitAIClient:
         resp.raise_for_status()
         return resp.json()[0]['result']['data']['json']
 
+    def upload_image(self, local_file: str) -> CivitaiImage:
+        filename = os.path.basename(local_file)
+        resp = self._session.post(
+            'https://civitai.com/api/image-upload',
+            json={
+                "filename": filename,
+                "metadata": {}
+            },
+        )
+        resp.raise_for_status()
+        upload_id = resp.json()['id']
+        upload_url = resp.json()['uploadURL']
+
+        logging.info(f'Uploading local image {local_file!r} as image {filename!r} ...')
+        with open(local_file, 'rb') as f:
+            resp = self._session.put(upload_url, data=f)
+            resp.raise_for_status()
+
+        return CivitaiImage(id=upload_id, filename=filename)
+
     def upload_images_for_model_version(
             self, model_version_id: int,
             image_files: Union[List[str], List[Tuple[str, str]]],
@@ -825,21 +846,7 @@ class CivitAIClient:
             else:
                 raise TypeError(f'Unknown type of upload image - {upload_item!r}.')
 
-            resp = self._session.post(
-                'https://civitai.com/api/image-upload',
-                json={
-                    "filename": filename,
-                    "metadata": {}
-                },
-            )
-            resp.raise_for_status()
-            upload_id = resp.json()['id']
-            upload_url = resp.json()['uploadURL']
-
-            logging.info(f'Uploading local image {local_file!r} as image {filename!r} ...')
-            with open(local_file, 'rb') as f:
-                resp = self._session.put(upload_url, data=f)
-                resp.raise_for_status()
+            upload_image = self.upload_image(local_file)
 
             logging.info(f'Completing the uploading of {filename!r} ...')
             width, height, bhash = self._get_image_info(local_file)
@@ -851,7 +858,7 @@ class CivitAIClient:
                     "uuid": str(uuid.uuid4()),
                     "name": filename,
                     "meta": self._get_meta_from_image_file(local_file),
-                    "url": upload_id,
+                    "url": upload_image.id,
                     "mimeType": "image/png",
                     "hash": bhash,
                     "width": width,
