@@ -57,7 +57,9 @@ def _vae_model_same(x, y):
 
 
 ReactionTyping = Literal['Like', 'Dislike', 'Heart', 'Laugh', 'Cry']
-CommercialUseTyping = Literal['None', 'Image', 'RentCivit', 'Rent', 'Sell']
+CommercialUseTyping = Literal['Image', 'RentCivit', 'Rent', 'Sell']
+DEFAULT_COMMERCIAL_USE: List[CommercialUseTyping] = ['RentCivit', 'Rent']
+
 ModelTypeTyping = Literal[
     'Checkpoint', 'Embedding', 'Hypernetwork', 'AestheticGradient', 'LORA', 'LoCon',
     'Controlnet', 'Upscaler', 'MotionModule', 'VAE', 'Poses', 'Wildcards', 'Workflows', 'Other',
@@ -536,7 +538,7 @@ class CivitAIClient:
 
     def upsert_model(self, name, description_md: str, tags: List[str], category: str = 'character',
                      type_: ModelTypeTyping = 'LORA', checkpoint_type: CheckpointTypeTyping = 'Trained',
-                     commercial_use: CommercialUseTyping = 'Rent', allow_no_credit: bool = True,
+                     commercial_use: List[CommercialUseTyping] = None, allow_no_credit: bool = True,
                      allow_derivatives: bool = True, allow_different_licence: bool = True,
                      nsfw: bool = False, poi: bool = False, exist_model_id: Optional[int] = None):
         tags_data, exist_tag_ids, exist_tags = [], set(), set()
@@ -556,13 +558,14 @@ class CivitAIClient:
                     tags_data.append({'id': undefined, 'name': tag})
                     exist_tags.add(tag.lower())
 
+        commercial_use = DEFAULT_COMMERCIAL_USE if commercial_use is None else commercial_use
         post_json = {
             "name": name,
             "description": markdown2.markdown(textwrap.dedent(description_md)),
             "type": type_,
             "checkpointType": None if type_.upper() != 'Checkpoint' else checkpoint_type,
 
-            "allowCommercialUse": commercial_use.lower().capitalize(),  # None, Image, Rent, Sell
+            "allowCommercialUse": commercial_use,  # None, Image, Rent, Sell
             "allowNoCredit": allow_no_credit,
             "allowDerivatives": allow_derivatives,
             "allowDifferentLicense": allow_different_licence,
