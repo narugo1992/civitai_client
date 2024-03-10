@@ -753,6 +753,14 @@ class CivitAIClient:
                 model_hash = sd_meta.parameters['Model hash']
                 meta['hashes'] = {'model': model_hash}
                 meta["Model hash"] = model_hash
+            if sd_meta.parameters.get('Hires resize'):
+                meta["Hires resize"] = sd_meta.parameters['Hires resize']
+            if sd_meta.parameters.get('Hires steps'):
+                meta["Hires steps"] = sd_meta.parameters['Hires steps']
+            if sd_meta.parameters.get('Hires upscaler'):
+                meta["Hires upscaler"] = sd_meta.parameters['Hires upscaler']
+            if sd_meta.parameters.get('Denoising strength'):
+                meta["Denoising strength"] = sd_meta.parameters['Denoising strength']
             if sd_meta.parameters.get('Model') and sd_meta.parameters.get('Model hash'):
                 meta["resources"] = [
                     {
