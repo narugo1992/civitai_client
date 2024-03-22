@@ -734,6 +734,11 @@ class CivitAIClient:
                 'prompt': sd_meta.prompt,
                 'negativePrompt': sd_meta.neg_prompt,
             }
+            for key, value in sd_meta.parameters.items():
+                if isinstance(value, tuple):
+                    meta[key] = f'{value[0]}x{value[1]}'
+                else:
+                    meta[key] = value
             if sd_meta.parameters.get('CFG scale'):
                 meta['cfgScale'] = int(sd_meta.parameters['CFG scale'])
             if sd_meta.parameters.get('Steps'):
