@@ -60,7 +60,9 @@ def _vae_model_same(x, y):
 
 
 ReactionTyping = Literal['Like', 'Dislike', 'Heart', 'Laugh', 'Cry']
-CommercialUseTyping = Literal['None', 'Image', 'RentCivit', 'Rent', 'Sell']
+CommercialUseTyping = Literal['Image', 'RentCivit', 'Rent', 'Sell']
+DEFAULT_COMMERCIAL_USE: List[CommercialUseTyping] = ['RentCivit', 'Rent']
+
 ModelTypeTyping = Literal[
     'Checkpoint', 'Embedding', 'Hypernetwork', 'AestheticGradient', 'LORA', 'LoCon',
     'Controlnet', 'Upscaler', 'MotionModule', 'VAE', 'Poses', 'Wildcards', 'Workflows', 'Other',
@@ -538,7 +540,7 @@ class CivitAIClient:
 
     def upsert_model(self, name, description_md: str, tags: List[str], category: str = 'character',
                      type_: ModelTypeTyping = 'LORA', checkpoint_type: CheckpointTypeTyping = 'Trained',
-                     commercial_use: CommercialUseTyping = 'Rent', allow_no_credit: bool = True,
+                     commercial_use: List[CommercialUseTyping] = None, allow_no_credit: bool = True,
                      allow_derivatives: bool = True, allow_different_licence: bool = True,
                      nsfw: bool = False, poi: bool = False, exist_model_id: Optional[int] = None):
         tags_data, exist_tag_ids, exist_tags = [], set(), set()
@@ -558,13 +560,14 @@ class CivitAIClient:
                     tags_data.append({'id': undefined, 'name': tag})
                     exist_tags.add(tag.lower())
 
+        commercial_use = DEFAULT_COMMERCIAL_USE if commercial_use is None else commercial_use
         post_json = {
             "name": name,
             "description": markdown2.markdown(textwrap.dedent(description_md)),
             "type": type_,
             "checkpointType": None if type_.upper() != 'Checkpoint' else checkpoint_type,
 
-            "allowCommercialUse": commercial_use.lower().capitalize(),  # None, Image, Rent, Sell
+            "allowCommercialUse": commercial_use,  # None, Image, Rent, Sell
             "allowNoCredit": allow_no_credit,
             "allowDerivatives": allow_derivatives,
             "allowDifferentLicense": allow_different_licence,
@@ -733,6 +736,11 @@ class CivitAIClient:
                 'prompt': sd_meta.prompt,
                 'negativePrompt': sd_meta.neg_prompt,
             }
+            for key, value in sd_meta.parameters.items():
+                if isinstance(value, tuple):
+                    meta[key] = f'{value[0]}x{value[1]}'
+                else:
+                    meta[key] = value
             if sd_meta.parameters.get('CFG scale'):
                 meta['cfgScale'] = int(sd_meta.parameters['CFG scale'])
             if sd_meta.parameters.get('Steps'):
@@ -752,6 +760,14 @@ class CivitAIClient:
                 model_hash = sd_meta.parameters['Model hash']
                 meta['hashes'] = {'model': model_hash}
                 meta["Model hash"] = model_hash
+            if sd_meta.parameters.get('Hires resize'):
+                meta["Hires resize"] = sd_meta.parameters['Hires resize']
+            if sd_meta.parameters.get('Hires steps'):
+                meta["Hires steps"] = sd_meta.parameters['Hires steps']
+            if sd_meta.parameters.get('Hires upscaler'):
+                meta["Hires upscaler"] = sd_meta.parameters['Hires upscaler']
+            if sd_meta.parameters.get('Denoising strength'):
+                meta["Denoising strength"] = sd_meta.parameters['Denoising strength']
             if sd_meta.parameters.get('Model') and sd_meta.parameters.get('Model hash'):
                 meta["resources"] = [
                     {
