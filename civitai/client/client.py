@@ -263,7 +263,6 @@ class CivitAIClient:
             "period": period,
             "sort": sort,
             "types": ["image"],
-            "username": username,
             "browsingLevel": 31,
             "cursor": m_cursor,
             "authed": self._authed,

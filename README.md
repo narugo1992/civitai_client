@@ -199,8 +199,7 @@ print(client.whoami)
 
 
 def _iter_images():
-    for post in client.iter_images_by_category():
-        yield from post['items']
+    yield from client.iter_images()
 
 
 if __name__ == '__main__':
