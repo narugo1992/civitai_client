@@ -35,6 +35,9 @@ except (ImportError, ModuleNotFoundError):
 m_page = SingletonMark('mark_page')
 m_cursor = SingletonMark('mark_cursor')
 
+PeriodTyping = Literal['Day', 'Week', 'Month', 'Year', 'AllTime']
+SortTyping = Literal['Newest', 'Oldest', 'Most Reactions', 'Most Buzz', 'Most Comments', 'Most Collected']
+
 
 def _replace_page(data, page):
     return nested_map(lambda x: page if x is m_page else x, data)
@@ -253,23 +256,22 @@ class CivitAIClient:
     def iter_posts_self(self):
         yield from self.iter_posts(self._username)
 
-    def iter_images(self, username):
-        yield from self._iter_via_cursor(
-            '/api/trpc/image.getInfinite',
-            {
-                "period": "AllTime",
-                "sort": "Newest",
-                "view": "categories",
-                "username": username,
-                "withMeta": False,
-                "browsingMode": "NSFW",
-                "cursor": m_cursor,
-                "authed": self._authed,
-            }
-        )
+    def iter_images(self, username=None, period: PeriodTyping = 'AllTime', sort: SortTyping = 'Newest'):
+        params = {
+            "period": period,
+            "sort": sort,
+            "types": ["image"],
+            "username": username,
+            "browsingLevel": 31,
+            "cursor": m_cursor,
+            "authed": self._authed,
+        }
+        if username:
+            params['username'] = username
+        yield from self._iter_via_cursor('/api/trpc/image.getInfinite', params)
 
     def iter_images_self(self):
-        yield from self.iter_images(self._username)
+        yield from self.iter_images(username=self._username, period='AllTime', sort='Newest')
 
     def iter_collections(self, userid):
         yield from self._iter_via_cursor(
