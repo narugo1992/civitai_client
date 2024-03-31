@@ -6,6 +6,7 @@ import re
 import textwrap
 import uuid
 import warnings
+from enum import IntFlag
 from typing import Optional, List, Union, Tuple
 from urllib.parse import urljoin
 
@@ -13,7 +14,6 @@ import blurhash
 import markdown2
 import numpy as np
 import requests
-from hbutils.collection import nested_map
 from hbutils.design import SingletonMark
 from hbutils.string import plural_word
 from imgutils.data import load_image
@@ -34,17 +34,50 @@ except (ImportError, ModuleNotFoundError):
 
 m_page = SingletonMark('mark_page')
 m_cursor = SingletonMark('mark_cursor')
+m_none = SingletonMark('mark_none')
 
 PeriodTyping = Literal['Day', 'Week', 'Month', 'Year', 'AllTime']
-SortTyping = Literal['Newest', 'Oldest', 'Most Reactions', 'Most Buzz', 'Most Comments', 'Most Collected']
+ImageSortTyping = Literal['Newest', 'Oldest', 'Most Reactions', 'Most Buzz', 'Most Comments', 'Most Collected']
+TagSortTyping = Literal['Most Models', 'Most Images', 'Most Posts', 'Most Articles', 'Most Hidden']
+
+
+class Level(IntFlag):
+    PG = 0x1
+    PG13 = 0x2
+    R = 0x4
+    X = 0x8
+    XXX = 0x10
+
+    SFW = PG | PG13
+    NSFW = R | X | XXX
+    ALL = PG | PG13 | R | X | XXX
+
+
+def _replace_mark(data, mark, v_mark):
+    if isinstance(data, dict):
+        retval = {}
+        for key, value in data.items():
+            if value is not m_none:
+                retval[key] = _replace_mark(value, mark, v_mark)
+        return type(data)(retval)
+
+    elif isinstance(data, (list, tuple)):
+        retval = []
+        for value in data:
+            if value is not m_none:
+                retval.append(_replace_mark(value, mark, v_mark))
+        return type(data)(retval)
+
+    else:
+        return data if data is not mark else v_mark
 
 
 def _replace_page(data, page):
-    return nested_map(lambda x: page if x is m_page else x, data)
+    return _replace_mark(data, m_page, page)
 
 
 def _replace_cursor(data, cursor):
-    return nested_map(lambda x: cursor if x is m_cursor else x, data)
+    return _replace_mark(data, m_cursor, cursor)
 
 
 def _norm(x, keep_space: bool = True):
@@ -78,6 +111,10 @@ class CivitAIClient:
     @classmethod
     def load(cls, anything: Optional[CookiesTyping] = None) -> 'CivitAIClient':
         return cls(load_civitai_session(anything))
+
+    @classmethod
+    def no_login(cls) -> 'CivitAIClient':
+        return cls.load(None)
 
     @property
     def whoami(self) -> Optional[WhoAmI]:
@@ -121,15 +158,19 @@ class CivitAIClient:
                 return json_
 
     def _get(self, url, data=undefined, parse: bool = True):
+        data = req_data_format(data)
+        logging.debug(f'GET {url!r}, data: {data!r} ...')
         return self._resp_postprocess(self._session.get(
             urljoin(CIVITAI_ROOT, url),
-            params={'input': json.dumps(req_data_format(data))},
+            params={'input': json.dumps(data)},
         ), parse=parse)
 
     def _post(self, url, data=undefined, parse: bool = True):
+        data = req_data_format(data)
+        logging.debug(f'GET {url!r}, data: {data!r} ...')
         return self._resp_postprocess(self._session.post(
             urljoin(CIVITAI_ROOT, url),
-            json=req_data_format(data),
+            json=data,
         ), parse=parse)
 
     @classmethod
@@ -258,12 +299,13 @@ class CivitAIClient:
     def iter_posts_self(self):
         yield from self.iter_posts(self._username)
 
-    def iter_images(self, username=None, period: PeriodTyping = 'AllTime', sort: SortTyping = 'Newest'):
+    def iter_images(self, username=None, period: PeriodTyping = 'AllTime',
+                    sort: ImageSortTyping = 'Newest', level: Level = Level.ALL):
         params = {
             "period": period,
             "sort": sort,
             "types": ["image"],
-            "browsingLevel": 31,
+            "browsingLevel": int(level),
             "cursor": m_cursor,
             "authed": self._authed,
         }
@@ -506,6 +548,44 @@ class CivitAIClient:
                 "query": tag,
                 "authed": True,
                 'page': m_page,
+            }
+        )
+
+    def iter_tags(self, entity_type: str, query: str = None,
+                  sort: TagSortTyping = None, categories_only: bool = False, votable: bool = False):
+        if entity_type == 'Model':
+            sort = sort or 'Most Models'
+        elif entity_type == 'Image':
+            sort = sort or 'Most Images'
+        elif entity_type == 'Post':
+            sort = sort or 'Most Posts'
+        elif entity_type == 'Article':
+            sort = sort or 'Most Articles'
+        else:
+            raise ValueError(f'Unknown entity type - {entity_type!r}.')
+        return self._iter_via_page(
+            '/api/trpc/tag.getAll',
+            {
+                "entityType": [entity_type],
+                "types": ["UserGenerated", "Label"] if votable else m_none,
+                "sort": sort,
+                "query": query if query else m_none,
+                # "unlisted": False,
+                "categories": categories_only,
+                "limit": 100,
+                "include": ["nsfwLevel"],
+                "authed": self._authed,
+                "page": m_page,
+            }
+        )
+
+    def get_votable_tags(self, image_id: int):
+        return self._get(
+            '/api/trpc/tag.getVotableTags',
+            {
+                "id": image_id,
+                "type": "image",
+                "authed": self._authed,
             }
         )
 
