@@ -11,3 +11,4 @@ urlobject
 pillow
 blurhash
 numpy
+pycivitai
