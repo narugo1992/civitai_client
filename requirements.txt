@@ -12,3 +12,4 @@ pillow
 blurhash
 numpy
 pycivitai
+backports.zoneinfo; python_version < '3.9'
