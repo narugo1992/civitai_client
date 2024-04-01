@@ -39,6 +39,10 @@ m_none = SingletonMark('mark_none')
 PeriodTyping = Literal['Day', 'Week', 'Month', 'Year', 'AllTime']
 ImageSortTyping = Literal['Newest', 'Oldest', 'Most Reactions', 'Most Buzz', 'Most Comments', 'Most Collected']
 TagSortTyping = Literal['Most Models', 'Most Images', 'Most Posts', 'Most Articles', 'Most Hidden']
+ModelSortTyping = Literal[
+    'Newest', 'Oldest', 'Most Buzz', 'Most Collected', 'Highest Rated',
+    'Most Downloaded', 'Most Liked', 'Most Discussed', 'Most Images',
+]
 
 
 class Level(IntFlag):
@@ -97,9 +101,9 @@ CommercialUseTyping = Literal['Image', 'RentCivit', 'Rent', 'Sell']
 DEFAULT_COMMERCIAL_USE: List[CommercialUseTyping] = ['RentCivit', 'Rent']
 
 ModelTypeTyping = Literal[
-    'Checkpoint', 'Embedding', 'Hypernetwork', 'AestheticGradient', 'LORA', 'LoCon',
+    'Checkpoint', 'Embedding', 'Hypernetwork', 'AestheticGradient', 'LORA', 'LoCon', 'DoRA',
     'Controlnet', 'Upscaler', 'MotionModule', 'VAE', 'Poses', 'Wildcards', 'Workflows', 'Other',
-]
+]  # attention : LoCon is named as LyCORIS on civitai page
 CheckpointTypeTyping = Literal['Trained', 'Merge']
 
 
@@ -242,7 +246,28 @@ class CivitAIClient:
     def iter_articles_self(self):
         yield from self.iter_articles(self._username)
 
-    def iter_models(self, username):
+    def iter_models(self, username=None, nsfw_level: Level = Level.ALL,
+                    sort: ModelSortTyping = 'Newest', period: PeriodTyping = 'AllTime',
+                    followed_only: bool = False, generation_supported_only: bool = False,
+                    show_early_access: bool = False, types: Optional[List[ModelTypeTyping]] = None):
+        yield from self._iter_via_cursor(
+            '/api/trpc/model.getAll',
+            {
+                "period": period,
+                "periodMode": "published",
+                "sort": sort,
+                "earlyAccess": show_early_access,
+                "supportsGeneration": generation_supported_only,
+                "followed": followed_only,
+                "browsingLevel": int(nsfw_level),
+                "username": username if username else m_none,
+                "types": types if types else m_none,
+                "cursor": m_cursor,
+                "authed": self._authed,
+            }
+        )
+
+    def iter_models_of_user(self, username):
         yield from self._iter_via_cursor(
             '/api/trpc/model.getAll',
             {
@@ -257,7 +282,7 @@ class CivitAIClient:
         )
 
     def iter_models_self(self):
-        yield from self.iter_models(self._username)
+        yield from self.iter_models_of_user(self._username)
 
     def iter_draft_models(self, limit: int = 10):
         yield from self._iter_via_page(
@@ -595,15 +620,6 @@ class CivitAIClient:
             {
                 "type": "VAE",
                 "authed": True,
-            }
-        )
-
-    def get_model_info(self, model_id: int):
-        return self._get(
-            '/api/trpc/model.getById',
-            {
-                "id": model_id,
-                "authed": True
             }
         )
 
@@ -1081,5 +1097,17 @@ class CivitAIClient:
                 'id': post_id,
                 'authed': True,
                 "publishedAt": parse_publish_at(publish_at or datetime.datetime.now()),
+            }
+        )
+
+    def model_thumb_up(self, model_id: int, model_version_id: int):
+        return self._post(
+            '/api/trpc/resourceReview.create',
+            {
+                "modelId": model_id,
+                "modelVersionId": model_version_id,
+                "recommended": True,
+                "rating": 5,
+                "authed": self._authed
             }
         )

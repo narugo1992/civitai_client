@@ -53,7 +53,7 @@ print(client.creator_info_self())
 print(client.get_buzz_count())
 
 # list models
-for item in client.iter_models('narugo1992'):
+for item in client.iter_models_of_user('narugo1992'):
     print(item['name'], item['publishedAt'])
 
 # list draft models
