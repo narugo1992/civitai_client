@@ -324,13 +324,15 @@ class CivitAIClient:
     def iter_posts_self(self):
         yield from self.iter_posts(self._username)
 
-    def iter_images(self, username=None, period: PeriodTyping = 'AllTime',
-                    sort: ImageSortTyping = 'Newest', level: Level = Level.ALL):
+    def iter_images(self, username=None, period: Optional[PeriodTyping] = 'AllTime',
+                    sort: Optional[ImageSortTyping] = 'Newest', level: Optional[Level] = Level.ALL,
+                    post_id: Optional[int] = None, no_type: bool = False):
         params = {
-            "period": period,
-            "sort": sort,
-            "types": ["image"],
-            "browsingLevel": int(level),
+            "postId": post_id if post_id is not None else m_none,
+            "period": period if period is not None else m_none,
+            "sort": sort if sort is not None else m_none,
+            "types": ["image"] if not no_type else m_none,
+            "browsingLevel": int(level) if level is not None else None,
             "cursor": m_cursor,
             "authed": self._authed,
         }
@@ -539,14 +541,12 @@ class CivitAIClient:
         )
 
     def iter_post_images(self, post_id):
-        yield from self._iter_via_cursor(
-            '/api/trpc/image.getInfinite',
-            {
-                "postId": post_id,
-                "browsingMode": "NSFW",
-                "cursor": m_cursor,
-                "authed": self._authed,
-            }
+        yield from self.iter_images(
+            period=None,
+            sort=None,
+            level=Level.ALL,
+            post_id=post_id,
+            no_type=True,
         )
 
     def iter_images_by_category(self):
