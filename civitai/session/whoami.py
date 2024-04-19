@@ -30,10 +30,10 @@ def _get_whoami_by_page_source(page_source: str) -> Optional[WhoAmI]:
         user_json = session_json['user']
         return WhoAmI(
             id=user_json['id'],
-            name=user_json['name'],
+            name=user_json.get('name'),
             username=user_json['username'],
             email=user_json['email'],
-            icon_image_url=user_json['image'],
+            icon_image_url=user_json.get('image'),
             created_at=dateparser.parse(user_json['createdAt']),
             raw=copy.deepcopy(user_json),
         )
