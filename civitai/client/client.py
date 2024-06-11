@@ -604,13 +604,13 @@ class CivitAIClient:
             }
         )
 
-    def get_votable_tags(self, image_id: int):
+    def get_votable_tags(self, image_id: int, force_auth: bool = False):
         return self._get(
             '/api/trpc/tag.getVotableTags',
             {
                 "id": image_id,
                 "type": "image",
-                "authed": self._authed,
+                "authed": True if force_auth else self._authed,
             }
         )
 
