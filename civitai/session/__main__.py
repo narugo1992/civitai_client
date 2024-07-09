@@ -22,25 +22,32 @@ def cli():
              help='Login civitai and save the cookies file.')
 @click.option('-o', '--output_file', 'output_file', type=str, required=True,
               help='Where to save the cookies file.', show_default=True)
-@click.option('-T', '--timeout', 'timeout', type=int, default=60,
+@click.option('-T', '--timeout', 'timeout', type=int, default=120,
               help='Default timeout of login.', show_default=True)
 def login(output_file: str, timeout: int):
     logging.basicConfig(level=logging.INFO)
-    save_cookies(get_civitai_cookies(timeout), output_file)
+    cookies, raw_user_info = get_civitai_cookies(timeout)
+    save_cookies(
+        cookies=cookies,
+        raw_user_info=raw_user_info,
+        file=output_file,
+    )
     logging.info(f'The cookies file is saved as {output_file!r}.')
 
 
 @cli.command('login_hf', context_settings={**GLOBAL_CONTEXT_SETTINGS},
              help='Login civitai and push the cookies file to huggingface private repository.')
-@click.option('-T', '--timeout', 'timeout', type=int, default=60,
+@click.option('-T', '--timeout', 'timeout', type=int, default=120,
               help='Default timeout of login.', show_default=True)
 @click.option('-r', '--repository', 'repository', type=str, required=True,
               help='Repository to save the cookies file.', show_default=True)
 def login_hf(timeout: int, repository: str):
     logging.basicConfig(level=logging.INFO)
     logging.info(f'Preparing cookie files.')
+    cookies, raw_user_info = get_civitai_cookies(timeout)
     push_cookies_to_hf(
-        cookies=get_civitai_cookies(timeout),
+        cookies=cookies,
+        raw_user_info=raw_user_info,
         repository=repository,
         file='civitai_cookies.json',
     )

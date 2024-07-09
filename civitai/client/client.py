@@ -7,7 +7,7 @@ import textwrap
 import uuid
 import warnings
 from enum import IntFlag
-from typing import Optional, List, Union, Tuple
+from typing import Optional, List, Union, Tuple, Mapping, Any
 from urllib.parse import urljoin
 
 import blurhash
@@ -24,7 +24,7 @@ from urlobject import URLObject
 from .exceptions import SessionError, APIError
 from .image import CivitaiImage
 from .superjs import resp_data_parse, req_data_format, undefined
-from ..session import load_civitai_session, whoami, WhoAmI, CIVITAI_ROOT
+from ..session import load_civitai_session, WhoAmI, CIVITAI_ROOT, get_whoami_by_raw_user_info
 from ..utils import CookiesTyping, parse_publish_at
 
 try:
@@ -108,13 +108,15 @@ CheckpointTypeTyping = Literal['Trained', 'Merge']
 
 
 class CivitAIClient:
-    def __init__(self, session: requests.Session):
+    def __init__(self, session: requests.Session, raw_user_info: Optional[Mapping[str, Any]] = None):
+
         self._session = session
-        self._whoami_value = None
+        self._whoami_value = get_whoami_by_raw_user_info(raw_user_info)
 
     @classmethod
     def load(cls, anything: Optional[CookiesTyping] = None) -> 'CivitAIClient':
-        return cls(load_civitai_session(anything))
+        session, raw_user_info = load_civitai_session(anything)
+        return cls(session=session, raw_user_info=raw_user_info)
 
     @classmethod
     def no_login(cls) -> 'CivitAIClient':
@@ -122,8 +124,6 @@ class CivitAIClient:
 
     @property
     def whoami(self) -> Optional[WhoAmI]:
-        if self._whoami_value is None:
-            self._whoami_value = whoami(self._session)
         return self._whoami_value
 
     @property

@@ -13,3 +13,4 @@ blurhash
 numpy
 pycivitai
 backports.zoneinfo; python_version < '3.9'
+hfutils>=0.2.9

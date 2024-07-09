@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import random
 import time
-from typing import Any, Mapping
+from typing import Any, Mapping, Tuple
 from urllib.parse import quote
 from urllib.request import getproxies
 
@@ -79,7 +79,7 @@ class CivitAIBrowser:
             self.__browser.close()
             self.__closed = True
 
-    def get_civitai_cookie(self, timeout: int = 60):
+    def get_civitai_cookie(self, timeout: int = 120):
         from .whoami import _get_whoami_by_page_source
 
         redirect_url = f'{CIVITAI_ROOT}/'
@@ -105,9 +105,10 @@ class CivitAIBrowser:
         items = sorted([
             (item['name'], item['value'])
             for item in self.__browser.get_cookies()
-            if item['domain'].endswith('civitai.com')
+            # if item['domain'].endswith('civitai.com')
         ])
-        return {key: value for key, value in items}
+        cookies = {key: value for key, value in items}
+        return cookies, _whoami.raw
 
     @staticmethod
     def __sleep_uniform(min_sleep: float, max_sleep: float, slow: bool = True) -> None:
@@ -124,5 +125,5 @@ class CivitAIBrowser:
             elm.send_keys(text)
 
 
-def get_civitai_cookies(login_timeout: int = 60) -> Mapping[str, str]:
+def get_civitai_cookies(login_timeout: int = 120) -> Tuple[Mapping[str, str], Mapping[str, Any]]:
     return CivitAIBrowser().get_civitai_cookie(timeout=login_timeout)

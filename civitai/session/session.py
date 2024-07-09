@@ -1,4 +1,4 @@
-from typing import Mapping, Optional
+from typing import Mapping, Optional, Any, Tuple
 
 import requests
 
@@ -13,8 +13,10 @@ def _get_civitai_session_from_cookies(cookies: Mapping[str, str]) -> requests.Se
     return session
 
 
-def load_civitai_session(anything: Optional[CookiesTyping] = None) -> requests.Session:
+def load_civitai_session(anything: Optional[CookiesTyping] = None) \
+        -> Tuple[requests.Session, Optional[Mapping[str, Any]]]:
     if anything:
-        return _get_civitai_session_from_cookies(load_cookies(anything))
+        cookies, raw_user_info = load_cookies(anything)
+        return _get_civitai_session_from_cookies(cookies), raw_user_info
     else:
-        return _get_civitai_session_from_cookies({})
+        return _get_civitai_session_from_cookies({}), None
