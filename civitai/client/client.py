@@ -1111,3 +1111,11 @@ class CivitAIClient:
                 "authed": self._authed
             }
         )
+
+    def get_image_generation_data(self, image_id):
+        return self._get(
+            '/api/trpc/image.getGenerationData',
+            {
+                'id': image_id,
+            }
+        )
