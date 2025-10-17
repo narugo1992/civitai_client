@@ -178,8 +178,8 @@ class CivitAIClient:
         ), parse=parse)
 
     @classmethod
-    def _iter_via_cursor_fn(cls, fn):
-        cursor = undefined
+    def _iter_via_cursor_fn(cls, fn, init_cursor: Optional[str] = None):
+        cursor = undefined if init_cursor is None else init_cursor
         while True:
             items, cursor = fn(cursor)
             yield from items
@@ -187,12 +187,12 @@ class CivitAIClient:
             if cursor is None:
                 break
 
-    def _iter_via_cursor(self, url, data, items_key: str = 'items'):
+    def _iter_via_cursor(self, url, data, items_key: str = 'items', init_cursor: Optional[str] = None):
         def _fn(cursor):
             resp_data = self._get(url, _replace_cursor(data, cursor))
             return resp_data[items_key], resp_data['nextCursor']
 
-        yield from self._iter_via_cursor_fn(_fn)
+        yield from self._iter_via_cursor_fn(_fn, init_cursor=init_cursor)
 
     @classmethod
     def _iter_via_page_fn(cls, fn):
@@ -326,7 +326,7 @@ class CivitAIClient:
 
     def iter_images(self, username=None, period: Optional[PeriodTyping] = 'AllTime',
                     sort: Optional[ImageSortTyping] = 'Newest', level: Optional[Level] = Level.ALL,
-                    post_id: Optional[int] = None, no_type: bool = False):
+                    post_id: Optional[int] = None, no_type: bool = False, init_cursor: Optional[str] = None):
         params = {
             "postId": post_id if post_id is not None else m_none,
             "period": period if period is not None else m_none,
@@ -338,7 +338,7 @@ class CivitAIClient:
         }
         if username:
             params['username'] = username
-        yield from self._iter_via_cursor('/api/trpc/image.getInfinite', params)
+        yield from self._iter_via_cursor('/api/trpc/image.getInfinite', params, init_cursor=init_cursor)
 
     def iter_images_self(self):
         yield from self.iter_images(username=self._username, period='AllTime', sort='Newest')
