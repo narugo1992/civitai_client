@@ -326,7 +326,7 @@ class CivitAIClient:
 
     def iter_images(self, username=None, period: Optional[PeriodTyping] = 'AllTime',
                     sort: Optional[ImageSortTyping] = 'Newest', level: Optional[Level] = Level.ALL,
-                    post_id: Optional[int] = None, no_type: bool = False, init_cursor: Optional[str] = None):
+                    post_id: Optional[int] = None, no_type: bool = False, init_cursor: Optional[str] = None, **kwargs):
         params = {
             "postId": post_id if post_id is not None else m_none,
             "period": period if period is not None else m_none,
@@ -335,6 +335,7 @@ class CivitAIClient:
             "browsingLevel": int(level) if level is not None else None,
             "cursor": m_cursor,
             "authed": self._authed,
+            **kwargs,
         }
         if username:
             params['username'] = username
